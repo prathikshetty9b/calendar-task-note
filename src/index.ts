@@ -1,12 +1,13 @@
-const express = require('express');
-const cors = require('cors');
-const morgan = require('morgan');
-require('dotenv').config();
+import express, { Request, Response } from 'express';
+import cors from 'cors';
+import morgan from 'morgan';
+import dotenv from 'dotenv';
+import calendarRoutes from './routes/calendarRoutes';
 
-const calendarRoutes = require('./routes/calendarRoutes');
+dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT: number = parseInt(process.env.PORT || '3000', 10);
 
 // Middleware
 app.use(cors());
@@ -17,11 +18,11 @@ app.use(morgan('dev'));
 app.use('/api/calendar', calendarRoutes);
 
 // Basic route
-app.get('/', (req, res) => {
+app.get('/', (_req: Request, res: Response) => {
   res.json({ message: 'Welcome to Calendar Task Note API' });
 });
 
 // Start server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
-}); 
+});

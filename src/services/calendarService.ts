@@ -1,24 +1,38 @@
-const { google } = require('googleapis');
-const { authenticate } = require('@google-cloud/local-auth');
-const path = require('path');
-const fs = require('fs').promises;
+import { google, Auth } from 'googleapis';
+import { authenticate } from '@google-cloud/local-auth';
+import path from 'path';
+import fs from 'fs/promises';
+
+interface EventDetails {
+  summary: string;
+  description: string;
+  startDateTime: string;
+  endDateTime: string;
+}
+
+interface Credentials {
+  type: string;
+  client_id: string;
+  client_secret: string;
+  refresh_token: string;
+}
 
 const SCOPES = ['https://www.googleapis.com/auth/calendar'];
 const TOKEN_PATH = path.join(process.cwd(), 'token.json');
 const CREDENTIALS_PATH = path.join(process.cwd(), 'credentials.json');
 
-async function loadSavedCredentialsIfExist() {
+async function loadSavedCredentialsIfExist(): Promise<Auth.OAuth2Client | null> {
   try {
-    const content = await fs.readFile(TOKEN_PATH);
-    const credentials = JSON.parse(content);
-    return google.auth.fromJSON(credentials);
+    const content = await fs.readFile(TOKEN_PATH, 'utf-8');
+    const credentials: Credentials = JSON.parse(content);
+    return google.auth.fromJSON(credentials) as Auth.OAuth2Client;
   } catch (err) {
     return null;
   }
 }
 
-async function saveCredentials(client) {
-  const content = await fs.readFile(CREDENTIALS_PATH);
+async function saveCredentials(client: Auth.OAuth2Client) {
+  const content = await fs.readFile(CREDENTIALS_PATH, 'utf-8');
   const keys = JSON.parse(content);
   const key = keys.installed || keys.web;
   const payload = JSON.stringify({
@@ -30,26 +44,30 @@ async function saveCredentials(client) {
   await fs.writeFile(TOKEN_PATH, payload);
 }
 
-async function authorize() {
+async function authorize(): Promise<Auth.OAuth2Client> {
   let client = await loadSavedCredentialsIfExist();
   if (client) {
     return client;
   }
+  
   client = await authenticate({
     scopes: SCOPES,
     keyfilePath: CREDENTIALS_PATH,
-  });
+  }) as Auth.OAuth2Client;
+  
+  if (!client) {
+    throw new Error('Failed to authorize');
+  }
+  
   if (client.credentials) {
     await saveCredentials(client);
   }
+  
   return client;
 }
 
-async function createEvent(eventDetails) {
-  const auth = await authorize();
-  const calendar = google.calendar({ version: 'v3', auth });
-
-  const event = {
+function createEventObject(eventDetails: EventDetails) {
+  return {
     summary: eventDetails.summary,
     description: eventDetails.description,
     start: {
@@ -61,11 +79,16 @@ async function createEvent(eventDetails) {
       timeZone: 'UTC',
     },
   };
+}
+
+async function createEvent(eventDetails: EventDetails) {
+  const auth = await authorize();
+  const calendar = google.calendar({ version: 'v3', auth });
 
   try {
     const response = await calendar.events.insert({
       calendarId: 'primary',
-      resource: event,
+      requestBody: createEventObject(eventDetails),
     });
     return response.data;
   } catch (error) {
@@ -74,28 +97,15 @@ async function createEvent(eventDetails) {
   }
 }
 
-async function updateEvent(eventId, eventDetails) {
+async function updateEvent(eventId: string, eventDetails: EventDetails) {
   const auth = await authorize();
   const calendar = google.calendar({ version: 'v3', auth });
-
-  const event = {
-    summary: eventDetails.summary,
-    description: eventDetails.description,
-    start: {
-      dateTime: eventDetails.startDateTime,
-      timeZone: 'UTC',
-    },
-    end: {
-      dateTime: eventDetails.endDateTime,
-      timeZone: 'UTC',
-    },
-  };
 
   try {
     const response = await calendar.events.update({
       calendarId: 'primary',
-      eventId: eventId,
-      resource: event,
+      eventId,
+      requestBody: createEventObject(eventDetails),
     });
     return response.data;
   } catch (error) {
@@ -104,14 +114,14 @@ async function updateEvent(eventId, eventDetails) {
   }
 }
 
-async function deleteEvent(eventId) {
+async function deleteEvent(eventId: string) {
   const auth = await authorize();
   const calendar = google.calendar({ version: 'v3', auth });
 
   try {
     await calendar.events.delete({
       calendarId: 'primary',
-      eventId: eventId,
+      eventId,
     });
     return { success: true };
   } catch (error) {
@@ -139,9 +149,10 @@ async function listEvents() {
   }
 }
 
-module.exports = {
+export {
   createEvent,
   updateEvent,
   deleteEvent,
   listEvents,
-}; 
+  EventDetails,
+};
