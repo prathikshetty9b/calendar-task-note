@@ -16,6 +16,7 @@ client_secret_*.json
 
 # IDE and editor files
 .vscode/
+*.code-workspace
 .idea/
 *.swp
 *.swo
@@ -35,3 +36,6 @@ temp/
 
 # System Files
 Thumbs.db
+
+# ignore archive folder
+archive/
